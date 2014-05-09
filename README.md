@@ -34,7 +34,7 @@ optional arguments:
   -P PAGE_SIZE, --page_size PAGE_SIZE
                         When retrieving result from GitLab, how many results
                         should be included in a given page?. (default: 20)
-  -s, --verify_ssl      Should we verify the SSL certificate? (default: False)
+  -s, --verify_ssl      Enable SSL certificate verification (default: False)
   -t TOKEN, --token TOKEN
                         The private GitLab API token to use for
                         authentication. Either this or username and password
@@ -47,6 +47,18 @@ optional arguments:
                         (default: 0)
   --version             show program's version number and exit
 ```
+
+### Limitations
+
+Pull requests are welcome to address the following minor limitations:
+
+-  Does not export attachments.
+-  Links between issues are lost.
+-  Only supports Python 3.
+-  LDAP users can only authenticate via `--token` option
+-  Only supports converting `:+1:`, `:-1:`, page links, user links, and code
+   blocks from Markdown to JIRA wiki markup.
+
 
 ### License
 

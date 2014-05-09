@@ -90,7 +90,7 @@ def main(argv=None):
                               results should be included in a given page?.',
                         type=int, default=20)
     parser.add_argument('-s', '--verify_ssl',
-                        help='Should we verify the SSL certificate?',
+                        help='Enable SSL certificate verification',
                         action='store_true')
     parser.add_argument('-t', '--token',
                         help='The private GitLab API token to use for \
@@ -124,7 +124,8 @@ def main(argv=None):
                             verify_ssl=args.verify_ssl)
     else:
         if not args.username:
-            args.username = input('Username: ')
+            print('Username: ', end="", file=sys.stderr)
+            args.username = input('').strip()
         if not args.password:
             args.password = getpass.getpass('Password: ')
         git = GitLab(args.gitlab_url, verify_ssl=args.verify_ssl)
