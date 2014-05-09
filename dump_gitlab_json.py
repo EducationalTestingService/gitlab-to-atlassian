@@ -8,19 +8,21 @@ Export all users/issues from GitLab to JIRA JSON format.
 
 import argparse
 import getpass
+import json
 import logging
 import re
 import readline
+import sys
 from collections import defaultdict
 from io import StringIO
 
-import gitlab
+from gitlab import Gitlab as GitLab
 
 
 __version__ = '0.1.0'
 
 
-def gen_all_results(git, method, *args, per_page=20):
+def gen_all_results(method, *args, per_page=20):
     '''
     Little helper function to generate all pages of results for a given method
     in one list.
@@ -29,7 +31,7 @@ def gen_all_results(git, method, *args, per_page=20):
     page_num = 0
     while get_more:
         page_num += 1
-        proj_page = method(git, *args, page=page_num, per_page=per_page)
+        proj_page = method(*args, page=page_num, per_page=per_page)
         get_more = len(proj_page) == per_page
         yield from iter(proj_page)
 
@@ -39,10 +41,13 @@ def md_to_wiki(md_string):
     Take Markdown-formatted comments and convert them to Wiki format.
     '''
     output_buf = StringIO()
-    for line in md_string.splitlines():
-        line = re.sub(r'```([a-z]+)$', r'{code:\1}', line)
-        line = re.sub(r'```$', r'{code}', line)
-        print(line, file=output_buf)
+    if md_string is not None:
+        for line in md_string.splitlines():
+            line = re.sub(r'```([a-z]+)$', r'{code:\1}', line)
+            line = re.sub(r'```$', r'{code}', line)
+            print(line, file=output_buf)
+    else:
+        print('', file=output_buf)
     return output_buf.getvalue()
 
 
@@ -102,33 +107,50 @@ def main(argv=None):
     logging.captureWarnings(True)
     logging.basicConfig(format=('%(asctime)s - %(name)s - %(levelname)s - ' +
                                 '%(message)s'), level=log_level)
-    logger = logging.getLogger(__name__)
 
     # Setup authenticated GitLab instance
     if args.token:
-        git = gitlab.Gitlab(args.gitlab_url, token=args.token,
+        git = GitLab(args.gitlab_url, token=args.token,
                             verify_ssl=args.verify_ssl)
     else:
         if not args.username:
             args.username = input('Username: ')
         if not args.password:
             args.password = getpass.getpass('Password: ')
-        git = gitlab.Gitlab(args.gitlab_url, verify_ssl=args.verify_ssl)
+        git = GitLab(args.gitlab_url, verify_ssl=args.verify_ssl)
         git.login(args.username, args.password)
 
-    logger.info('Creating project entries...')
-    projects = gen_all_results(git, git.getprojects, per_page=args.page_size)
+    print('Creating project entries...', end="", file=sys.stderr)
+    sys.stderr.flush()
+    projects = gen_all_results(git.getprojects, per_page=args.page_size)
     output_dict = defaultdict(list)
+    key_set = set()
     for project in projects:
         if project['issues_enabled']:
-            project_issues = list(gen_all_results(git, git.getprojectissues,
+            project_issues = list(gen_all_results(git.getprojectissues,
                                                   project['id'],
                                                   per_page=args.page_size))
             if len(project_issues) or args.include_empty:
                 jira_project = {}
                 jira_project['name'] = project['name']
+                key = project['name']
+                if key.islower():
+                    key = key.title()
+                key = re.sub(r'[^A-Z]', '', key)
+                if len(key) < 2:
+                    key = project['name'][0:2].upper()
+                added = False
+                suffix = 65
+                while key in key_set:
+                    if not added:
+                        key += 'A'
+                    else:
+                        suffix += 1
+                        key = key[:-1] + chr(suffix)
+                key_set.add(key)
+                jira_project['key'] = key
                 jira_project['description'] = md_to_wiki(project['description'])
-                jira_project['created'] = project['created_at']
+                # jira_project['created'] = project['created_at']
                 jira_project['issues'] = []
                 for issue in project_issues:
                     jira_issue = {}
@@ -141,20 +163,26 @@ def main(argv=None):
                     jira_issue['summary'] = issue['title']
                     if issue['assignee']:
                         jira_issue['assignee'] = issue['assignee']['username']
-                    jira_project['issueType'] = 'Bug'
-                    jira_project['comments'] = []
+                    jira_issue['issueType'] = 'Bug'
+                    jira_issue['comments'] = []
                     # Get all comments/notes
-                    for note in gen_all_results(git, git.getissuewallnotes,
-                                                project['id'], issue['id'],
-                                                per_page=args.page_size):
+                    for note in git.getissuewallnotes(project['id'],
+                                                      issue['id']):
                         jira_note = {}
                         jira_note['body'] = md_to_wiki(note['body'])
                         jira_note['author'] = note['author']['username']
                         jira_note['created'] = note['created_at']
-                        jira_project['comments'].append(jira_note)
+                        jira_issue['comments'].append(jira_note)
                     jira_project['issues'].append(jira_issue)
 
-        output_dict['projects'].append(jira_project)
+                output_dict['projects'].append(jira_project)
+        print('.', end="", file=sys.stderr)
+        sys.stderr.flush()
+
+    print('\nPrinting JSON output...', file=sys.stderr)
+    sys.stderr.flush()
+    print(json.dumps(output_dict, indent=4))
+
 
 if __name__ == '__main__':
     main()
