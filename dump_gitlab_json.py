@@ -43,8 +43,16 @@ def md_to_wiki(md_string):
     output_buf = StringIO()
     if md_string is not None:
         for line in md_string.splitlines():
+            # Code blocks
             line = re.sub(r'```([a-z]+)$', r'{code:\1}', line)
             line = re.sub(r'```$', r'{code}', line)
+            # Emoji
+            line = line.replace(':+1:', '(y)')
+            line = line.replace(':-1:', '(n)')
+            # Hyperlinks
+            line = re.sub(r'\[([^\]]+)\]\(([^\)]+)', r'[\1|\2]', line)
+            # Usernames
+            line = re.sub(r'@([a-zA-Z0-9]+)(\b|_$)', r'[~\1]\2', line)
             print(line, file=output_buf)
     else:
         print('', file=output_buf)
@@ -120,12 +128,14 @@ def main(argv=None):
         git = GitLab(args.gitlab_url, verify_ssl=args.verify_ssl)
         git.login(args.username, args.password)
 
+    # Initialize output dictionary
+    output_dict = defaultdict(list)
+
     print('Creating project entries...', end="", file=sys.stderr)
     sys.stderr.flush()
-    projects = gen_all_results(git.getprojects, per_page=args.page_size)
-    output_dict = defaultdict(list)
     key_set = set()
-    for project in projects:
+    mentioned_users = set()
+    for project in gen_all_results(git.getprojects, per_page=args.page_size):
         if project['issues_enabled']:
             project_issues = list(gen_all_results(git.getprojectissues,
                                                   project['id'],
@@ -138,7 +148,7 @@ def main(argv=None):
                     key = key.title()
                 key = re.sub(r'[^A-Z]', '', key)
                 if len(key) < 2:
-                    key = project['name'][0:2].upper()
+                    key = re.sub(r'[^A-Za-z]', '', project['name'])[0:2].upper()
                 added = False
                 suffix = 65
                 while key in key_set:
@@ -155,14 +165,20 @@ def main(argv=None):
                 for issue in project_issues:
                     jira_issue = {}
                     jira_issue['externalId'] = issue['iid']
-                    jira_issue['status'] = ('Closed' if (issue['state'] ==
-                                                         'closed') else 'Open')
+                    if issue['state'] == 'closed':
+                        jira_issue['status'] = 'Closed'
+                        jira_issue['resolution'] = 'Resolved'
+                    else:
+                        jira_issue['status'] = 'Open'
+
                     jira_issue['description'] = md_to_wiki(issue['description'])
                     jira_issue['reporter'] = issue['author']['username']
+                    mentioned_users.add(jira_issue['reporter'])
                     jira_issue['labels'] = issue['labels']
                     jira_issue['summary'] = issue['title']
                     if issue['assignee']:
                         jira_issue['assignee'] = issue['assignee']['username']
+                        mentioned_users.add(jira_issue['assignee'])
                     jira_issue['issueType'] = 'Bug'
                     jira_issue['comments'] = []
                     # Get all comments/notes
@@ -171,11 +187,27 @@ def main(argv=None):
                         jira_note = {}
                         jira_note['body'] = md_to_wiki(note['body'])
                         jira_note['author'] = note['author']['username']
+                        mentioned_users.add(jira_note['author'])
                         jira_note['created'] = note['created_at']
                         jira_issue['comments'].append(jira_note)
                     jira_project['issues'].append(jira_issue)
 
                 output_dict['projects'].append(jira_project)
+        print('.', end="", file=sys.stderr)
+        sys.stderr.flush()
+
+    print('\nCreating user entries...', end="", file=sys.stderr)
+    sys.stderr.flush()
+    for user in gen_all_results(git.getusers, per_page=args.page_size):
+        # Only add users who are actually referenced in issues
+        if user['username'] in mentioned_users:
+            jira_user = {}
+            jira_user['name'] = user['username']
+            jira_user['fullname'] = user['name']
+            jira_user['email'] = user['email']
+            jira_user['groups'] = ['gitlab-users']
+            jira_user['active'] = (user['state'] == 'active')
+            output_dict['users'].append(jira_user)
         print('.', end="", file=sys.stderr)
         sys.stderr.flush()
 
