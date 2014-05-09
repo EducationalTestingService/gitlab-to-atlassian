@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
+# License: BSD 3 clause
 '''
 Export all users/issues from GitLab to JIRA JSON format.
 
 :author: Dan Blanchard (dblanchard@ets.org)
+:organization: ETS
 :date: May 2014
 '''
 
