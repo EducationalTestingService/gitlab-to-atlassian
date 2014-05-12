@@ -52,7 +52,7 @@ def md_to_wiki(md_string):
             line = line.replace(':+1:', '(y)')
             line = line.replace(':-1:', '(n)')
             # Hyperlinks
-            line = re.sub(r'\[([^\]]+)\]\(([^\)]+)', r'[\1|\2]', line)
+            line = re.sub(r'\[([^\]]+)\]\(([^\)]+)\)', r'[\1|\2]', line)
             # Usernames
             line = re.sub(r'@([a-zA-Z0-9]+)(\b|_$)', r'[~\1]\2', line)
             print(line, file=output_buf)
