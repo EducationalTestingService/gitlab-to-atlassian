@@ -116,22 +116,23 @@ def main(argv=None):
     key_set = {proj['key'] for proj in stash.projects}
     stash_project_names = {proj['name'] for proj in stash.projects}
     names_to_keys = {proj['name']: proj['key'] for proj in stash.projects}
+    repo_to_slugs = {}
     print('done', file=sys.stderr)
     sys.stderr.flush()
     cwd = os.getcwd()
     print('Processing GitLab projects...', file=sys.stderr)
     sys.stderr.flush()
     for project in gen_all_results(git.getprojects, per_page=args.page_size):
-        stash_project = project['namespace']['name']
+        proj_name = project['namespace']['name']
         # Create Stash project if it doesn't already exist
-        if stash_project not in stash_project_names:
+        if proj_name not in stash_project_names:
             # Create Stash project key
-            key = stash_project
+            key = proj_name
             if key.islower():
                 key = key.title()
             key = re.sub(r'[^A-Z]', '', key)
             if len(key) < 2:
-                key = re.sub(r'[^A-Za-z]', '', stash_project)[0:2].upper()
+                key = re.sub(r'[^A-Za-z]', '', proj_name)[0:2].upper()
             added = False
             suffix = 65
             while key in key_set:
@@ -144,15 +145,22 @@ def main(argv=None):
 
             # Actually add the project to Stash
             print('Creating Stash project "%s" with key %s...' %
-                  (stash_project, key), end="", file=sys.stderr)
+                  (proj_name, key), end="", file=sys.stderr)
             sys.stderr.flush()
-            stash.projects.create(key, stash_project)
-            names_to_keys[stash_project] = key
-            stash_project_names.add(stash_project)
+            stash.projects.create(key, proj_name)
+            names_to_keys[proj_name] = key
+            stash_project_names.add(proj_name)
             print('done', file=sys.stderr)
             sys.stderr.flush()
         else:
-            key = names_to_keys[stash_project]
+            key = names_to_keys[proj_name]
+
+        stash_project = stash.projects[key]
+
+        # Initialize maping from repository names to slugs for later
+        if key not in repo_to_slugs:
+            repo_to_slugs[key] = {repo['name']: repo['slug'] for repo in
+                                  stash_project.repos}
 
         # Create Stash-compatible name for repository
         # Repository names are limited to 128 characters.
@@ -166,19 +174,20 @@ def main(argv=None):
             repo_name = repo_name[0:128]
 
         # Add repository to Stash project if it's not already there
-        if repo_name not in {repo['name'] for repo in
-                             stash.projects[key].repos}:
+        if repo_name not in repo_to_slugs[key]:
             print('Creating Stash repository "%s" in project "%s"...' %
-                  (repo_name, stash_project), end="", file=sys.stderr)
+                  (repo_name, proj_name), file=sys.stderr)
             sys.stderr.flush()
-            stash_repo = stash.projects[key].repos.create(repo_name)
+            stash_repo = stash_project.repos.create(repo_name)
+            repo_to_slugs[key][repo_name] = stash_repo['slug']
             print('done', file=sys.stderr)
             sys.stderr.flush()
         else:
             print('Updating existing Stash repository "%s" in project "%s"' %
-                  (repo_name, stash_project), end="", file=sys.stderr)
+                  (repo_name, proj_name), file=sys.stderr)
             sys.stderr.flush()
-            stash_repo = stash.projects[key].repos[repo_name].get()
+            repo_slug = repo_to_slugs[key][repo_name]
+            stash_repo = stash_project.repos[repo_slug].get()
 
         for clone_link in stash_repo['links']['clone']:
             if clone_link['name'] == 'ssh':
