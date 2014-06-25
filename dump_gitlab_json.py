@@ -13,7 +13,6 @@ import getpass
 import json
 import logging
 import re
-import readline
 import sys
 from collections import defaultdict
 from io import StringIO
