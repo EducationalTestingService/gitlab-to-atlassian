@@ -178,7 +178,7 @@ def main(argv=None):
             print('Updating existing Stash repository "%s" in project "%s"' %
                   (repo_name, stash_project), end="", file=sys.stderr)
             sys.stderr.flush()
-            stash_repo = stash.projects[key].repos['repo_name']
+            stash_repo = stash.projects[key].repos[repo_name].get()
 
         for clone_link in stash_repo['links']['clone']:
             if clone_link['name'] == 'ssh':
