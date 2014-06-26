@@ -24,17 +24,20 @@ from gitlab import Gitlab as GitLab
 __version__ = '0.1.0'
 
 
-def gen_all_results(method, *args, per_page=20):
+def gen_all_results(method, *args, per_page=20, **kwargs):
     '''
     Little helper function to generate all pages of results for a given method
     in one list.
     '''
     get_more = True
     page_num = 0
+    if 'page' in kwargs:
+        kwargs.pop('page')
     while get_more:
         page_num += 1
-        proj_page = method(*args, page=page_num, per_page=per_page)
-        get_more = len(proj_page) == per_page
+        proj_page = method(*args, page=page_num, per_page=per_page, **kwargs)
+        # proj_page will be False if method fails
+        get_more = proj_page and (len(proj_page) == per_page)
         yield from iter(proj_page)
 
 
@@ -120,17 +123,30 @@ def main(argv=None):
     key_set = {proj['key'] for proj in stash.projects}
     stash_project_names = {proj['name'] for proj in stash.projects}
     names_to_keys = {proj['name']: proj['key'] for proj in stash.projects}
-    updated_projects = set()
-    repo_to_slugs = {}
     print('done', file=sys.stderr)
     sys.stderr.flush()
+    print('Retrieving list of all GitLab projects...', end="", file=sys.stderr)
+    sys.stderr.flush()
+    gitlab_users = [user['username'] for user in
+                    gen_all_results(git.getusers, per_page=args.page_size)]
+    all_gitlab_proj_ids = {project['id'] for user in gitlab_users for project
+                           in gen_all_results(git.getprojects,
+                                              per_page=args.page_size,
+                                              sudo=user)}
+    print('done', file=sys.stderr)
+    sys.stderr.flush()
+    updated_projects = set()
+    repo_to_slugs = {}
+    failed_to_clone = set()
     cwd = os.getcwd()
     print('Processing GitLab projects...', file=sys.stderr)
     sys.stderr.flush()
     transfer_count = 0
-    for project in gen_all_results(git.getprojects, per_page=args.page_size):
+    skipped_count = 0
+    for proj_id in all_gitlab_proj_ids:
         print('\n' + ('=' * 80) + '\n', file=sys.stderr)
         sys.stderr.flush()
+        project = git.getproject(proj_id)
         proj_name = project['namespace']['name']
         # Create Stash project if it doesn't already exist
         if proj_name not in stash_project_names:
@@ -194,6 +210,7 @@ def main(argv=None):
             print('Skipping existing Stash repository "%s" in project "%s"' %
                   (repo_name, proj_name), file=sys.stderr)
             sys.stderr.flush()
+            skipped_count += 1
             continue
         else:
             print('Updating existing Stash repository "%s" in project "%s"' %
@@ -211,9 +228,16 @@ def main(argv=None):
             # Clone repository to temporary directory
             print('\nCloning GitLab repository...', file=sys.stderr)
             sys.stderr.flush()
-            subprocess.check_call(['git', 'clone', '--mirror',
-                                   project['ssh_url_to_repo'],
-                                   temp_dir])
+            try:
+                subprocess.check_call(['git', 'clone', '--mirror',
+                                       project['ssh_url_to_repo'],
+                                       temp_dir])
+            except subprocess.CalledProcessError:
+                print('Failed to clone GitLab repository. This usually when ' +
+                      'it does not exist.', file=sys.stderr)
+                failed_to_clone.add(project['name_with_namespace'])
+                skipped_count += 1
+                continue
             os.chdir(temp_dir)
 
             # Check that repository is not empty
@@ -224,6 +248,7 @@ def main(argv=None):
             except subprocess.CalledProcessError:
                 print('Repository is empty, so skipping push to Stash.',
                       file=sys.stderr)
+                skipped_count += 1
             else:
                 # Change remote to Stash and push
                 print('\nPushing repository to Stash...', file=sys.stderr)
@@ -238,12 +263,18 @@ def main(argv=None):
         updated_projects.add(proj_name)
 
 
-    print('\n' + ('=' * 30) + 'SUMMARY' + ('=' * 30), file=sys.stderr)
+    print('\n' + ('=' * 35) + 'SUMMARY' + ('=' * 35), file=sys.stderr)
     print('{} repositories transferred.\n'.format(transfer_count),
+          file=sys.stderr)
+    print('{} repositories skipped.\n'.format(skipped_count),
           file=sys.stderr)
     print('Projects created/updated:', file=sys.stderr)
     for proj in sorted(updated_projects):
         print('\t' + proj, file=sys.stderr)
+    print('Repositories that we could not clone:', file=sys.stderr)
+    for repo_name in sorted(failed_to_clone):
+        print('\t' + repo_name, file=sys.stderr)
+
 
 if __name__ == '__main__':
     main()
