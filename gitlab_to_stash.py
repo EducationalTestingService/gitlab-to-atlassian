@@ -182,7 +182,7 @@ def main(argv=None):
         # Add repository to Stash project if it's not already there
         if repo_name not in repo_to_slugs[key]:
             print('Creating Stash repository "%s" in project "%s"...' %
-                  (repo_name, proj_name), file=sys.stderr)
+                  (repo_name, proj_name), end="", file=sys.stderr)
             sys.stderr.flush()
             stash_repo = stash_project.repos.create(repo_name)
             repo_to_slugs[key][repo_name] = stash_repo['slug']
