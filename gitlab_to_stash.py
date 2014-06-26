@@ -126,7 +126,9 @@ def main(argv=None):
     cwd = os.getcwd()
     print('Processing GitLab projects...', file=sys.stderr)
     sys.stderr.flush()
-    for project in gen_all_results(git.getprojects, per_page=args.page_size):
+    i = 0
+    for i, project in enumerate(gen_all_results(git.getprojects,
+                                                per_page=args.page_size)):
         print('\n' + ('=' * 80) + '\n', file=sys.stderr)
         sys.stderr.flush()
         proj_name = project['namespace']['name']
@@ -232,7 +234,7 @@ def main(argv=None):
 
             os.chdir(cwd)
 
-    print ('\n\nAll repositories transferred.\n', file=sys.stderr)
+    print('\n\n{} repositories transferred.\n'.format(i), file=sys.stderr)
 
 if __name__ == '__main__':
     main()
