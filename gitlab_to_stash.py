@@ -120,15 +120,15 @@ def main(argv=None):
     key_set = {proj['key'] for proj in stash.projects}
     stash_project_names = {proj['name'] for proj in stash.projects}
     names_to_keys = {proj['name']: proj['key'] for proj in stash.projects}
+    updated_projects = set()
     repo_to_slugs = {}
     print('done', file=sys.stderr)
     sys.stderr.flush()
     cwd = os.getcwd()
     print('Processing GitLab projects...', file=sys.stderr)
     sys.stderr.flush()
-    i = 0
-    for i, project in enumerate(gen_all_results(git.getprojects,
-                                                per_page=args.page_size)):
+    transfer_count = 0
+    for project in gen_all_results(git.getprojects, per_page=args.page_size):
         print('\n' + ('=' * 80) + '\n', file=sys.stderr)
         sys.stderr.flush()
         proj_name = project['namespace']['name']
@@ -157,7 +157,7 @@ def main(argv=None):
             sys.stderr.flush()
             stash.projects.create(key, proj_name)
             names_to_keys[proj_name] = key
-            stash_project_names.gadd(proj_name)
+            stash_project_names.add(proj_name)
             print('done', file=sys.stderr)
             sys.stderr.flush()
         else:
@@ -231,10 +231,19 @@ def main(argv=None):
                 subprocess.check_call(['git', 'remote', 'set-url', 'origin',
                                        stash_repo_url])
                 subprocess.check_call(['git', 'push', '--mirror'])
+                transfer_count += 1
 
             os.chdir(cwd)
 
-    print('\n\n{} repositories transferred.\n'.format(i), file=sys.stderr)
+        updated_projects.add(proj_name)
+
+
+    print('\n' + ('=' * 30) + 'SUMMARY' + ('=' * 30), file=sys.stderr)
+    print('{} repositories transferred.\n'.format(transfer_count),
+          file=sys.stderr)
+    print('Projects created/updated:', file=sys.stderr)
+    for proj in sorted(updated_projects):
+        print('\t' + proj, file=sys.stderr)
 
 if __name__ == '__main__':
     main()
