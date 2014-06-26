@@ -69,6 +69,10 @@ def main(argv=None):
     parser.add_argument('-s', '--verify_ssl',
                         help='Enable SSL certificate verification',
                         action='store_true')
+    parser.add_argument('-S', '--skip_existing',
+                        help='Do not update existing repositories and just \
+                              skip them.',
+                        action='store_true')
     parser.add_argument('-t', '--token',
                         help='The private GitLab API token to use for \
                               authentication. Either this or username and \
@@ -123,6 +127,8 @@ def main(argv=None):
     print('Processing GitLab projects...', file=sys.stderr)
     sys.stderr.flush()
     for project in gen_all_results(git.getprojects, per_page=args.page_size):
+        print('\n' + ('=' * 80) + '\n', file=sys.stderr)
+        sys.stderr.flush()
         proj_name = project['namespace']['name']
         # Create Stash project if it doesn't already exist
         if proj_name not in stash_project_names:
@@ -149,7 +155,7 @@ def main(argv=None):
             sys.stderr.flush()
             stash.projects.create(key, proj_name)
             names_to_keys[proj_name] = key
-            stash_project_names.add(proj_name)
+            stash_project_names.gadd(proj_name)
             print('done', file=sys.stderr)
             sys.stderr.flush()
         else:
@@ -182,6 +188,11 @@ def main(argv=None):
             repo_to_slugs[key][repo_name] = stash_repo['slug']
             print('done', file=sys.stderr)
             sys.stderr.flush()
+        elif args.skip_existing:
+            print('Skipping existing Stash repository "%s" in project "%s"' %
+                  (repo_name, proj_name), file=sys.stderr)
+            sys.stderr.flush()
+            continue
         else:
             print('Updating existing Stash repository "%s" in project "%s"' %
                   (repo_name, proj_name), file=sys.stderr)
@@ -201,20 +212,25 @@ def main(argv=None):
             subprocess.check_call(['git', 'clone', '--mirror',
                                    project['ssh_url_to_repo'],
                                    temp_dir])
-            # Change remote to Stash and push
             os.chdir(temp_dir)
-            print('\nPushing repository to Stash...', file=sys.stderr)
-            sys.stderr.flush()
-            subprocess.check_call(['git', 'remote', 'set-url', 'origin',
-                                   stash_repo_url])
-            subprocess.check_call(['git', 'push', '--mirror'])
+
+            # Check that repository is not empty
+            try:
+                subprocess.check_call(['git', 'log'])
+            except subprocess.CalledProcessError:
+                print('Repository is empty, so skipping push to Stash.',
+                      file=sys.stderr)
+            else:
+                # Change remote to Stash and push
+                print('\nPushing repository to Stash...', file=sys.stderr)
+                sys.stderr.flush()
+                subprocess.check_call(['git', 'remote', 'set-url', 'origin',
+                                       stash_repo_url])
+                subprocess.check_call(['git', 'push', '--mirror'])
+
             os.chdir(cwd)
 
-        print('\n' + ('=' * 80) + '\n', file=sys.stderr)
-        sys.stderr.flush()
-
-    print('done', file=sys.stderr)
-
+    print ('\n\nAll repositories transferred.\n', file=sys.stderr)
 
 if __name__ == '__main__':
     main()
