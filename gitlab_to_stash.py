@@ -216,7 +216,9 @@ def main(argv=None):
 
             # Check that repository is not empty
             try:
-                subprocess.check_call(['git', 'log'])
+                subprocess.check_call(['git', 'log', '--format=oneline', '-1'],
+                                      stdout=subprocess.DEVNULL,
+                                      stderr=subprocess.DEVNULL)
             except subprocess.CalledProcessError:
                 print('Repository is empty, so skipping push to Stash.',
                       file=sys.stderr)
