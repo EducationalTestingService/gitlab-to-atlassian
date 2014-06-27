@@ -15,6 +15,8 @@ import logging
 import re
 import sys
 from collections import defaultdict
+from datetime import datetime
+from functools import partial
 from io import StringIO
 
 from gitlab import Gitlab as GitLab
@@ -23,18 +25,32 @@ from gitlab import Gitlab as GitLab
 __version__ = '0.1.0'
 
 
-def gen_all_results(method, *args, per_page=20):
+# The datetime format output by GitLab
+TIME_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
+
+def get_datetime(date_str):
+    ''' Turns a YYYY-MM-DD string into a datetime object '''
+    return datetime.strptime(date_str, '%Y-%m-%d')
+
+
+def gen_all_results(method, *args, per_page=20, **kwargs):
     '''
     Little helper function to generate all pages of results for a given method
     in one list.
     '''
     get_more = True
     page_num = 0
+    if 'page' in kwargs:
+        kwargs.pop('page')
     while get_more:
         page_num += 1
-        proj_page = method(*args, page=page_num, per_page=per_page)
-        get_more = len(proj_page) == per_page
-        yield from iter(proj_page)
+        proj_page = method(*args, page=page_num, per_page=per_page, **kwargs)
+        # proj_page will be False if method fails
+        if proj_page:
+            get_more = len(proj_page) == per_page
+            yield from iter(proj_page)
+        else:
+            get_more = False
 
 
 def md_to_wiki(md_string):
@@ -75,10 +91,18 @@ def main(argv=None):
         conflict_handler='resolve')
     parser.add_argument('gitlab_url',
                         help='The full URL to your GitLab instance.')
+    parser.add_argument('-d', '--date_filter',
+                        help='Only include issues, notes, etc. created after\
+                              the specified date. Expected format is \
+                              YYYY-MM-DD',
+                        type=get_datetime, default='1970-01-01')
     parser.add_argument('-e', '--include_empty',
                         help='Include projects in output that do not have any\
                               issues.',
                         action='store_true')
+    parser.add_argument('-i', '--ignore_list',
+                        help='List of project names to exclude from dump.',
+                        type=argparse.FileType('r'))
     parser.add_argument('-p', '--password',
                         help='The password to use to authenticate if token is \
                               not specified. If password and token are both \
@@ -120,7 +144,7 @@ def main(argv=None):
     # Setup authenticated GitLab instance
     if args.token:
         git = GitLab(args.gitlab_url, token=args.token,
-                            verify_ssl=args.verify_ssl)
+                     verify_ssl=args.verify_ssl)
     else:
         if not args.username:
             print('Username: ', end="", file=sys.stderr)
@@ -137,20 +161,39 @@ def main(argv=None):
     sys.stderr.flush()
     key_set = set()
     mentioned_users = set()
-    for project in gen_all_results(git.getprojects, per_page=args.page_size):
-        if project['issues_enabled']:
-            project_issues = list(gen_all_results(git.getprojectissues,
-                                                  project['id'],
-                                                  per_page=args.page_size))
-            if len(project_issues) or args.include_empty:
+    if args.ignore_list is not None:
+        ignore_list = {line.strip().lower() for line in args.ignore_list}
+    else:
+        ignore_list = {}
+    for project in gen_all_results(git.getallprojects,
+                                   per_page=args.page_size):
+        proj_name_lower = project['name'].lower()
+        if proj_name_lower not in ignore_list and project['issues_enabled']:
+            project_issues = []
+            for issue in gen_all_results(git.getprojectissues, project['id'],
+                                         per_page=args.page_size):
+                if args.date_filter < datetime.strptime(issue['updated_at'],
+                                                        TIME_FORMAT):
+                    project_issues.append(issue)
+                else:
+                    for note in git.getissuewallnotes(project['id'],
+                                                      issue['id']):
+                        if (args.date_filter <
+                                datetime.strptime(note['created_at'],
+                                                  TIME_FORMAT)):
+                            project_issues.append(issue)
+                            break
+
+            if project_issues or args.include_empty:
                 jira_project = {}
-                jira_project['name'] = project['name']
+                jira_project['name'] = project['name_with_namespace']
                 key = project['name']
                 if key.islower():
                     key = key.title()
                 key = re.sub(r'[^A-Z]', '', key)
                 if len(key) < 2:
-                    key = re.sub(r'[^A-Za-z]', '', project['name'])[0:2].upper()
+                    key = re.sub(r'[^A-Za-z]', '',
+                                 project['name'])[0:2].upper()
                 added = False
                 suffix = 65
                 while key in key_set:
