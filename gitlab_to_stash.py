@@ -37,8 +37,11 @@ def gen_all_results(method, *args, per_page=20, **kwargs):
         page_num += 1
         proj_page = method(*args, page=page_num, per_page=per_page, **kwargs)
         # proj_page will be False if method fails
-        get_more = proj_page and (len(proj_page) == per_page)
-        yield from iter(proj_page)
+        if proj_page:
+            get_more = len(proj_page) == per_page
+            yield from iter(proj_page)
+        else:
+            get_more = False
 
 
 def main(argv=None):
@@ -125,28 +128,18 @@ def main(argv=None):
     names_to_keys = {proj['name']: proj['key'] for proj in stash.projects}
     print('done', file=sys.stderr)
     sys.stderr.flush()
-    print('Retrieving list of all GitLab projects...', end="", file=sys.stderr)
-    sys.stderr.flush()
-    gitlab_users = [user['username'] for user in
-                    gen_all_results(git.getusers, per_page=args.page_size)]
-    all_gitlab_proj_ids = {project['id'] for user in gitlab_users for project
-                           in gen_all_results(git.getprojects,
-                                              per_page=args.page_size,
-                                              sudo=user)}
-    print('done', file=sys.stderr)
-    sys.stderr.flush()
     updated_projects = set()
     repo_to_slugs = {}
     failed_to_clone = set()
     cwd = os.getcwd()
-    print('Processing GitLab projects...', file=sys.stderr)
-    sys.stderr.flush()
     transfer_count = 0
     skipped_count = 0
-    for proj_id in all_gitlab_proj_ids:
+    print('Processing GitLab projects...', file=sys.stderr)
+    sys.stderr.flush()
+    for project in gen_all_results(git.getallprojects,
+                                   per_page=args.page_size):
         print('\n' + ('=' * 80) + '\n', file=sys.stderr)
         sys.stderr.flush()
-        project = git.getproject(proj_id)
         proj_name = project['namespace']['name']
         # Create Stash project if it doesn't already exist
         if proj_name not in stash_project_names:
