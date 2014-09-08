@@ -12,11 +12,6 @@ This script attempts to export all of the issues (and the users associated with
 them) from GitLab to JIRA. I wrote it in a few hours, but it got the job done.
 I'm posting it on GitHub since other people may also find it useful.
 
-### Requirements
-
-- Python 3 (although pull request to support 2 are welcome)
-- [Python GitLab API library](https://github.com/Itxaka/pyapi-gitlab)
-
 ### Usage
 
 ```
@@ -63,30 +58,12 @@ optional arguments:
   --version             show program's version number and exit
 ```
 
-### Limitations
-
-Pull requests are welcome to address the following minor limitations:
-
--  Does not export attachments.
--  Links between issues are lost.
--  Only supports Python 3.
--  LDAP users can only authenticate via `--token` option
--  Only supports converting `:+1:`, `:-1:`, page links, user links, and code
-   blocks from Markdown to JIRA wiki markup.
-
 ***
 
 ## Exporting GitLab projects and repositories to Stash
 
 `gitlab_to_stash.py` clones all projects from GitLab and recreates them on
 Stash.  It attempts to replicate the GitLab's project/namespace hierarchy.
-
-### Requirements
-
-- Python 3 (although pull request to support 2 are welcome)
-- [Python GitLab API library](https://github.com/Itxaka/pyapi-gitlab)
-- [Stashy](https://github.com/RisingOak/stashy)
-- Admin access to GitLab (to export private repositories)
 
 ### Usage
 
@@ -128,16 +105,14 @@ optional arguments:
   --version             show program's version number and exit
 ```
 
-### Limitations
-
-Pull requests are welcome to address the following minor limitations:
-
--  Must use SSH key for authentication with GitLab and Stash repositories
--  Pull requests are not recreated.
--  Only supports Python 3.
--  LDAP users can only authenticate via `--token` option
-
 ***
+
+## Requirements
+
+- Python 3 (although pull request to support 2 are welcome)
+- [Python GitLab API library](https://github.com/Itxaka/pyapi-gitlab)
+- [Stashy](https://github.com/RisingOak/stashy) Python library
+- Admin access to GitLab is necessary to export private repositories
 
 ## License
 
