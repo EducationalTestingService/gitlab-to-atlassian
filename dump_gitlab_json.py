@@ -165,7 +165,7 @@ def main(argv=None):
         ignore_list = {line.strip().lower() for line in args.ignore_list}
     else:
         ignore_list = {}
-    for project in gen_all_results(git.getallprojects,
+    for project in gen_all_results(git.getprojectsall,
                                    per_page=args.page_size):
         proj_name_lower = project['name'].lower()
         if proj_name_lower not in ignore_list and project['issues_enabled']:
