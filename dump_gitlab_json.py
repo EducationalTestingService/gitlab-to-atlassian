@@ -20,13 +20,10 @@ from functools import partial
 from io import StringIO
 
 from gitlab import Gitlab as GitLab
-
+from dateutil.parser import parse as parsedate
 
 __version__ = '0.1.0'
 
-
-# The datetime format output by GitLab
-TIME_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 def get_datetime(date_str):
     ''' Turns a YYYY-MM-DD string into a datetime object '''
@@ -172,15 +169,12 @@ def main(argv=None):
             project_issues = []
             for issue in gen_all_results(git.getprojectissues, project['id'],
                                          per_page=args.page_size):
-                if args.date_filter < datetime.strptime(issue['updated_at'],
-                                                        TIME_FORMAT):
+                if args.date_filter < parsedate(issue['updated_at']).replace(tzinfo=None):
                     project_issues.append(issue)
                 else:
                     for note in git.getissuewallnotes(project['id'],
                                                       issue['id']):
-                        if (args.date_filter <
-                                datetime.strptime(note['created_at'],
-                                                  TIME_FORMAT)):
+                        if args.date_filter < parsedate(issue['updated_at']).replace(tzinfo=None):
                             project_issues.append(issue)
                             break
 
