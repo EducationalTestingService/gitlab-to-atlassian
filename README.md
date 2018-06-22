@@ -1,4 +1,4 @@
-**IMPORTANT**: This project is no longer actively maintained. It was last known to work with the GitLab version from 2014 and is unlikely to work with newer versions of GitLab with a different API. If you are interested in contributing or maintaining this project, please let us know.
+**IMPORTANT: This project is no longer actively maintained. It was last known to work with the GitLab version from 2014 and is unlikely to work with newer versions of GitLab with a different API. If you are interested in contributing or maintaining this project, please let us know.**
 
 # GitLab to Atlassian
 
